@@ -18,12 +18,27 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Check pip
+python -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] pip khong hoat dong!
+    echo Thu: python -m ensurepip --upgrade
+    pause
+    exit /b 1
+)
+
 :: Check dependencies
 echo [INFO] Kiem tra dependencies...
-pip show PyQt5 >nul 2>&1
+python -m pip show PyQt5 >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Cai dat dependencies...
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
+    if errorlevel 1 (
+        echo [ERROR] Cai dat dependencies that bai!
+        echo Vui long chay: python -m pip install -r requirements.txt
+        pause
+        exit /b 1
+    )
 )
 
 :: Run app

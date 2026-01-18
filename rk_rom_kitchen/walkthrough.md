@@ -53,15 +53,19 @@ python -m app.main
 Menu: Build → Build Image
 - Partition: system_a, vendor_a, product_a
 - Filesystem: ext4 (mặc định) hoặc erofs
-- Output: raw, sparse, hoặc both
+- Output Type: both (raw + sparse), raw, hoặc sparse
 - Auto-detect: file_contexts, fs_config, image size
+- UI widgets bind trực tiếp với config
 ```
 
 #### Disable dm-verity (A+B)
 ```
 Menu: Other → AVB/DM-Verity/Forceencrypt
-A) vbmeta_disabled.img → out/Image/
-B) Patch fstab → vendor/etc/fstab.* (backup .bak)
+3 nút:
+- "Disable All (A+B)" = tạo vbmeta_disabled + patch fstab
+- "vbmeta Only (A)" = CHỈ tạo vbmeta_disabled.img
+- "fstab Only (B)" = CHỈ patch fstab (backup .bak)
+Output: out/Image/vbmeta_disabled.img
 ```
 
 #### Debloater
