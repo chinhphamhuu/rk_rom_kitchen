@@ -3,6 +3,7 @@ Tool Registry - Quản lý và auto-detect các tools cần thiết
 Hỗ trợ alias filenames cho mỗi tool_id
 """
 import os
+import sys
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -162,22 +163,31 @@ class ToolRegistry:
             )
     
     def _get_search_paths(self) -> List[Path]:
-        """Lấy danh sách paths để search tools"""
+        """Lấy danh sách paths để search tools
+        Search order:
+        1. User custom tool_dir (nếu set)
+        2. Bundled tools/win64 (relative to repo)
+        3. PATH environment
+        """
         paths = []
         
-        # 1. Custom tool_dir từ settings
+        # 1. Custom tool_dir từ settings (user priority)
         custom_dir = self._settings.get('tool_dir', '')
         if custom_dir and Path(custom_dir).is_dir():
             paths.append(Path(custom_dir))
         
-        # 2. third_party/tools/win64 (relative to app)
-        app_root = Path(__file__).parent.parent.parent  # rk_rom_kitchen/
-        third_party = app_root / 'third_party' / 'tools' / 'win64'
-        if third_party.is_dir():
-            paths.append(third_party)
+        # 2. Bundled tools/win64 (relative to rk_rom_kitchen/)
+        # __file__ = rk_rom_kitchen/app/tools/registry.py
+        # app_root = rk_rom_kitchen/
+        app_root = Path(__file__).parent.parent.parent
+        bundled_dir = app_root / 'tools' / 'win64'
+        if bundled_dir.is_dir():
+            paths.append(bundled_dir)
         
-        # 3. Current directory
-        paths.append(Path.cwd())
+        # 3. Legacy third_party path (fallback)
+        legacy_dir = app_root / 'third_party' / 'tools' / 'win64'
+        if legacy_dir.is_dir():
+            paths.append(legacy_dir)
         
         # 4. PATH environment
         env_path = os.environ.get('PATH', '')
@@ -186,6 +196,20 @@ class ToolRegistry:
                 paths.append(Path(p))
         
         return paths
+    
+    def get_active_tool_dir(self) -> Optional[Path]:
+        """Lấy đường dẫn tool directory đang active"""
+        custom_dir = self._settings.get('tool_dir', '')
+        if custom_dir and Path(custom_dir).is_dir():
+            return Path(custom_dir)
+        
+        # Check bundled
+        app_root = Path(__file__).parent.parent.parent
+        bundled_dir = app_root / 'tools' / 'win64'
+        if bundled_dir.is_dir():
+            return bundled_dir
+        
+        return None
     
     def detect_all(self) -> Dict[str, ToolInfo]:
         """
@@ -254,7 +278,8 @@ class ToolRegistry:
         """Try to get tool version"""
         try:
             if is_python and tool_path.suffix == '.py':
-                cmd = ["python", str(tool_path), version_arg]
+                # Use sys.executable to avoid hardcoding 'python'
+                cmd = [sys.executable, str(tool_path), version_arg]
             else:
                 cmd = [str(tool_path), version_arg]
             
