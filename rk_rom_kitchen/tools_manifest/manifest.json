@@ -1,0 +1,71 @@
+{
+    "version": "1.0",
+    "description": "Tool manifest cho RK ROM Kitchen - Phase 2 Download",
+    "base_url": "https://example.com/tools/",
+    "tools": [
+        {
+            "name": "img_unpack",
+            "exe": "img_unpack.exe",
+            "description": "Rockchip image unpacker",
+            "url": "img_unpack_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 102400
+        },
+        {
+            "name": "afptool",
+            "exe": "afptool.exe",
+            "description": "Rockchip AFPTool for firmware packing",
+            "url": "afptool_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 204800
+        },
+        {
+            "name": "rkImageMaker",
+            "exe": "rkImageMaker.exe",
+            "description": "Rockchip image maker",
+            "url": "rkImageMaker_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 153600
+        },
+        {
+            "name": "lpunpack",
+            "exe": "lpunpack.exe",
+            "description": "Android super partition unpacker",
+            "url": "lpunpack_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 512000
+        },
+        {
+            "name": "lpmake",
+            "exe": "lpmake.exe",
+            "description": "Android super partition maker",
+            "url": "lpmake_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 512000
+        },
+        {
+            "name": "simg2img",
+            "exe": "simg2img.exe",
+            "description": "Sparse image to raw image converter",
+            "url": "simg2img_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 102400
+        },
+        {
+            "name": "img2simg",
+            "exe": "img2simg.exe",
+            "description": "Raw image to sparse image converter",
+            "url": "img2simg_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 102400
+        },
+        {
+            "name": "avbtool",
+            "exe": "avbtool.exe",
+            "description": "Android Verified Boot tool",
+            "url": "avbtool_v1.0.zip",
+            "sha256": "placeholder_hash",
+            "size": 256000
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+Đặt các tools Rockchip vào thư mục này:
+
+- img_unpack.exe
+- afptool.exe
+- rkImageMaker.exe
+- lpunpack.exe
+- lpmake.exe
+- simg2img.exe
+- img2simg.exe
+- avbtool.exe
+
+Hoặc set đường dẫn tools trong Settings > Tool Directory.

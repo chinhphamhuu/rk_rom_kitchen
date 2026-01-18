@@ -1,0 +1,11 @@
+# RK ROM Kitchen Requirements
+# Python 3.10+
+
+# Core UI
+PyQt5>=5.15.0
+
+# Build
+pyinstaller>=5.0
+
+# Optional - for development
+# pytest>=7.0

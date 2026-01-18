@@ -1,0 +1,3 @@
+"""
+Patches scripts package
+"""

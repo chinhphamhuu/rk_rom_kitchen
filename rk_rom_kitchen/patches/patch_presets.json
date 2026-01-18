@@ -1,0 +1,67 @@
+{
+    "version": "1.0",
+    "presets": [
+        {
+            "id": "disable_dm_verity",
+            "name": "Tắt dm-verity",
+            "name_en": "Disable dm-verity",
+            "description": "Vô hiệu hóa dm-verity để cho phép sửa đổi system partition",
+            "enabled_default": true,
+            "category": "security"
+        },
+        {
+            "id": "disable_avb",
+            "name": "Tắt AVB",
+            "name_en": "Disable AVB",
+            "description": "Vô hiệu hóa Android Verified Boot",
+            "enabled_default": true,
+            "category": "security"
+        },
+        {
+            "id": "enable_adb_root",
+            "name": "Bật ADB Root",
+            "name_en": "Enable ADB Root",
+            "description": "Cho phép chạy adb root trên thiết bị",
+            "enabled_default": false,
+            "category": "debug"
+        },
+        {
+            "id": "remove_force_encrypt",
+            "name": "Tắt Force Encryption",
+            "name_en": "Remove Force Encryption",
+            "description": "Loại bỏ bắt buộc mã hóa data partition",
+            "enabled_default": false,
+            "category": "security"
+        },
+        {
+            "id": "enable_usb_debugging",
+            "name": "Bật USB Debugging",
+            "name_en": "Enable USB Debugging",
+            "description": "Bật USB Debugging mặc định",
+            "enabled_default": false,
+            "category": "debug"
+        },
+        {
+            "id": "debloat",
+            "name": "Gỡ bloatware",
+            "name_en": "Debloat",
+            "description": "Gỡ bỏ các ứng dụng bloatware theo danh sách",
+            "enabled_default": false,
+            "category": "apps"
+        }
+    ],
+    "categories": {
+        "security": {
+            "name": "Bảo mật",
+            "name_en": "Security"
+        },
+        "debug": {
+            "name": "Debug",
+            "name_en": "Debug"
+        },
+        "apps": {
+            "name": "Ứng dụng",
+            "name_en": "Apps"
+        }
+    }
+}

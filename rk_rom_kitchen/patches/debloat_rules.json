@@ -1,0 +1,53 @@
+{
+    "version": "1.0",
+    "description": "Danh sách apps để debloat",
+    "rules": [
+        {
+            "package": "com.android.browser",
+            "name": "Browser",
+            "category": "google",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.email",
+            "name": "Email",
+            "category": "google",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.music",
+            "name": "Music",
+            "category": "media",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.gallery3d",
+            "name": "Gallery",
+            "category": "media",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.calendar",
+            "name": "Calendar",
+            "category": "productivity",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.deskclock",
+            "name": "Clock",
+            "category": "productivity",
+            "safe_remove": true
+        },
+        {
+            "package": "com.android.calculator2",
+            "name": "Calculator",
+            "category": "productivity",
+            "safe_remove": true
+        }
+    ],
+    "categories": {
+        "google": "Google Apps",
+        "media": "Media Apps",
+        "productivity": "Productivity"
+    }
+}
