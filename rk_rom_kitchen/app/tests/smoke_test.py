@@ -54,7 +54,16 @@ def test_imports():
         from app import i18n
         from app import crash_guard
         
+        # UI imports (catch ImportError from bad imports)
+        from app.ui import main_window
+        from app.ui.pages import page_build_image
+        from app.ui.pages import page_avb
+        from app.ui.pages import page_magisk
+        from app.ui.pages import page_boot_unpack
+        from app.ui.dialogs import debloater_dialog
+        
         print("[OK] All core modules imported successfully")
+        print("[OK] All UI modules imported successfully")
         return True
     except ImportError as e:
         print(f"[FAIL] Import error: {e}")

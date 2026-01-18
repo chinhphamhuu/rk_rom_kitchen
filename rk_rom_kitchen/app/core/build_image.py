@@ -493,3 +493,9 @@ def build_image_bulk(
         message=f"Built {built_count} partitions",
         elapsed_ms=elapsed
     )
+
+
+# Compatibility alias (deprecated - use build_image)
+def build_image_demo(project: Project, partition: str, config: BuildImageConfig, _cancel_token: Event = None) -> TaskResult:
+    """Alias for build_image for backward compatibility"""
+    return build_image(project, partition, config, _cancel_token)

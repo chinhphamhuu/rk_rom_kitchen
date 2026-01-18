@@ -385,3 +385,9 @@ def disable_dm_verity_full(
         elapsed = int((time.time() - start) * 1000)
         log.error(f"[DM-VERITY] Error: {e}")
         return TaskResult.error(str(e), elapsed_ms=elapsed)
+
+
+# Compatibility alias (deprecated - use disable_dm_verity_full)
+def disable_dm_verity_demo(project: Project, _cancel_token: Event = None) -> TaskResult:
+    """Alias for disable_dm_verity_full for backward compatibility"""
+    return disable_dm_verity_full(project, _cancel_token)

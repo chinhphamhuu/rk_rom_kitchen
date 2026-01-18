@@ -14,7 +14,7 @@ from ...core.logbus import get_log_bus
 from ...core.state_machine import get_state_machine, TaskType
 from ...core.task_manager import get_task_manager
 from ...core.build_image import (
-    BuildImageConfig, DEFAULT_PARTITION_CONFIGS, build_image_demo,
+    BuildImageConfig, DEFAULT_PARTITION_CONFIGS, build_image,
     find_file_contexts, find_fs_config, get_folder_size, estimate_image_size
 )
 
@@ -184,7 +184,7 @@ class BuildImagePage(QWidget):
         self._log.info(f"Building {partition}...")
         
         self._tasks.submit(
-            build_image_demo,
+            build_image,
             task_type=TaskType.BUILD,
             on_finished=self._on_build_finished,
             project=project,

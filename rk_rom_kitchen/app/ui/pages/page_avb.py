@@ -13,7 +13,7 @@ from ...core.project_store import get_project_store
 from ...core.logbus import get_log_bus
 from ...core.state_machine import get_state_machine, TaskType
 from ...core.task_manager import get_task_manager
-from ...core.avb_manager import find_vbmeta_files, find_fstab_files, disable_dm_verity_demo
+from ...core.avb_manager import find_vbmeta_files, find_fstab_files, disable_dm_verity_full
 
 
 class PageAVB(QWidget):
@@ -129,7 +129,7 @@ class PageAVB(QWidget):
         
         self._log.info("Disabling dm-verity (A+B)...")
         self._tasks.submit(
-            disable_dm_verity_demo,
+            disable_dm_verity_full,
             task_type=TaskType.PATCH,
             on_finished=lambda r: self._log.success("Done") if r.ok else self._log.error(r.message),
             project=project
