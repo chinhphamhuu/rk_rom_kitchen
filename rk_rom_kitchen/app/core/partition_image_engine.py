@@ -1,6 +1,9 @@
 """
 Partition Image Engine - REAL implementation cho partition images (system/vendor/product)
-Xử lý sparse/raw, ext4/erofs
+OUTPUT CONTRACT:
+- Filesystem extracted → project.out_source_dir/<partition_name>/
+- Image output → project.out_image_dir/<partition_name>_patched.img
+KHÔNG PLACEHOLDER. Chỉ OK khi output thật tồn tại.
 """
 import os
 import sys
@@ -8,33 +11,28 @@ import time
 import json
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 from threading import Event
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .task_defs import TaskResult
 from .project_store import Project
 from .logbus import get_log_bus
 from .utils import ensure_dir, human_size
-from .detect import is_sparse_header, read_file_header, is_ext4_image
 from ..tools.registry import get_tool_registry
 
 
-@dataclass
-class PartitionMetadata:
-    """Metadata của partition image"""
-    name: str
-    original_path: str
-    fs_type: str = "unknown"  # ext4, erofs, unknown
-    was_sparse: bool = False
-    raw_path: str = ""
-    size: int = 0
+# Magic bytes
+SPARSE_MAGIC = b'\x3a\xff\x26\xed'
+EXT4_MAGIC_OFFSET = 0x438
+EXT4_MAGIC = b'\x53\xef'
 
 
 def run_tool(args: list, cwd: Path = None, timeout: int = 600) -> Tuple[int, str, str]:
     """Run tool, return (returncode, stdout, stderr)"""
     log = get_log_bus()
-    log.debug(f"[TOOL] {' '.join(str(a) for a in args[:4])}...")
+    cmd_str = ' '.join(str(a) for a in args[:5])
+    log.debug(f"[TOOL] {cmd_str}...")
     
     try:
         result = subprocess.run(
@@ -52,130 +50,179 @@ def run_tool(args: list, cwd: Path = None, timeout: int = 600) -> Tuple[int, str
         return -1, "", str(e)
 
 
-def detect_fs_type(img_path: Path) -> str:
-    """Detect filesystem type of a raw image"""
-    # Check ext4 magic
-    if is_ext4_image(img_path):
-        return "ext4"
-    
-    # Check EROFS magic (0xE0F5E1E2 at offset 1024)
+def read_file_header(file_path: Path, size: int = 16) -> bytes:
+    """Read file header bytes safely"""
     try:
-        with open(img_path, 'rb') as f:
+        with open(file_path, 'rb') as f:
+            return f.read(size)
+    except Exception:
+        return b''
+
+
+def is_sparse_image(file_path: Path) -> bool:
+    """Check if file is Android sparse image"""
+    header = read_file_header(file_path, 4)
+    return header == SPARSE_MAGIC
+
+
+def is_ext4_image(file_path: Path) -> bool:
+    """Check if file is ext4 filesystem image"""
+    try:
+        with open(file_path, 'rb') as f:
+            f.seek(EXT4_MAGIC_OFFSET)
+            magic = f.read(2)
+            return magic == EXT4_MAGIC
+    except Exception:
+        return False
+
+
+def is_erofs_image(file_path: Path) -> bool:
+    """Check if file is EROFS filesystem image"""
+    try:
+        with open(file_path, 'rb') as f:
             f.seek(1024)
             magic = f.read(4)
-            if magic == b'\xe2\xe1\xf5\xe0':  # Little-endian
-                return "erofs"
+            return magic == b'\xe2\xe1\xf5\xe0'  # EROFS magic
     except Exception:
-        pass
-    
+        return False
+
+
+def detect_fs_type(img_path: Path) -> str:
+    """Detect filesystem type of a raw image"""
+    if is_ext4_image(img_path):
+        return "ext4"
+    if is_erofs_image(img_path):
+        return "erofs"
     return "unknown"
 
 
-def convert_sparse_to_raw(
-    sparse_path: Path,
-    raw_path: Path,
-    _cancel_token: Event = None
-) -> TaskResult:
-    """Convert sparse image to raw"""
+def convert_sparse_to_raw(sparse_path: Path, raw_path: Path) -> TaskResult:
+    """Convert sparse image to raw using simg2img"""
     log = get_log_bus()
     registry = get_tool_registry()
     
     simg2img = registry.get_tool_path("simg2img")
     if not simg2img:
-        return TaskResult.error("Tool simg2img không tìm thấy")
+        return TaskResult.error("Thiếu tool simg2img.exe. Vui lòng kiểm tra Tools Doctor.")
     
     ensure_dir(raw_path.parent)
     
     args = [simg2img, sparse_path, raw_path]
-    log.info(f"[PARTITION] Converting sparse to raw: {sparse_path.name}")
+    log.info(f"[PARTITION] Converting sparse → raw: {sparse_path.name}")
     
     code, stdout, stderr = run_tool(args, timeout=600)
     
     if code != 0:
-        log.error(f"[PARTITION] simg2img failed: {stderr}")
         return TaskResult.error(f"simg2img failed: {stderr[:200]}")
     
     if not raw_path.exists():
         return TaskResult.error("simg2img không tạo output file")
     
-    log.success(f"[PARTITION] Converted to raw: {raw_path.name}")
-    return TaskResult.success("Converted to raw")
+    log.success(f"[PARTITION] Converted to raw: {human_size(raw_path.stat().st_size)}")
+    return TaskResult.success("Converted sparse to raw")
 
 
-def extract_ext4(
-    img_path: Path,
-    output_dir: Path,
-    _cancel_token: Event = None
-) -> TaskResult:
-    """Extract ext4 filesystem to folder"""
+def extract_ext4_real(img_path: Path, output_dir: Path) -> TaskResult:
+    """
+    Extract ext4 filesystem using debugfs rdump
+    OUTPUT THẬT, không placeholder
+    """
     log = get_log_bus()
     registry = get_tool_registry()
     
-    # Try e2fsdroid first (không cần root)
-    # Fallback: mount + copy (cần quyền) - không khả thi trên Windows
-    # For now: just create placeholder and note limitation
+    # Check debugfs
+    debugfs = registry.get_tool_path("debugfs")
+    if not debugfs:
+        return TaskResult.error(
+            "Thiếu tool debugfs.exe để extract ext4. "
+            "Vui lòng thêm debugfs.exe vào tools/win64 và kiểm tra Tools Doctor."
+        )
     
     ensure_dir(output_dir)
     
-    log.warning("[PARTITION] ext4 extraction: Chức năng này cần implement với e2fsdroid hoặc tool phù hợp")
-    log.info("[PARTITION] Tạo placeholder folder...")
+    # debugfs -R "rdump / <output_dir>" <image>
+    rdump_cmd = f'rdump / "{output_dir}"'
+    args = [debugfs, "-R", rdump_cmd, img_path]
     
-    # Create placeholder
-    placeholder = output_dir / "_EXTRACT_PLACEHOLDER.txt"
-    placeholder.write_text(
-        "ext4 extraction placeholder\n"
-        "Để extract ext4 trên Windows cần:\n"
-        "- 7-Zip với plugin ext4\n"
-        "- Linux VM/WSL\n",
-        encoding='utf-8'
-    )
+    log.info(f"[PARTITION] Extracting ext4 với debugfs...")
+    code, stdout, stderr = run_tool(args, timeout=1800)
     
-    return TaskResult.success("ext4 placeholder created")
+    # debugfs có thể return 0 nhưng vẫn có warning trong stderr
+    # Check output thật sự có file không
+    files = list(output_dir.rglob("*"))
+    if not files:
+        err_msg = stderr[:300] if stderr else "Không có output"
+        return TaskResult.error(f"debugfs rdump không tạo file. Error: {err_msg}")
+    
+    file_count = len([f for f in files if f.is_file()])
+    log.success(f"[PARTITION] ext4 extracted: {file_count} files")
+    
+    return TaskResult.success(f"Extracted {file_count} files from ext4")
 
 
-def extract_erofs(
-    img_path: Path,
-    output_dir: Path,
-    _cancel_token: Event = None
-) -> TaskResult:
-    """Extract erofs filesystem to folder"""
+def extract_erofs_real(img_path: Path, output_dir: Path) -> TaskResult:
+    """
+    Extract EROFS filesystem using extract.erofs
+    OUTPUT THẬT, không placeholder
+    """
     log = get_log_bus()
     registry = get_tool_registry()
     
-    # Look for extract.erofs
-    # In bundled tools, it might be named extract.erofs.exe
+    # Look for extract.erofs in bundled tools
     erofs_tool = None
-    search_names = ["extract.erofs", "extract_erofs", "fsck.erofs"]
-    
     tools_dir = Path(__file__).parent.parent.parent / "tools" / "win64"
-    for name in search_names:
-        candidate = tools_dir / f"{name}.exe"
+    
+    for name in ["extract.erofs.exe", "extract_erofs.exe", "fsck.erofs.exe"]:
+        candidate = tools_dir / name
         if candidate.exists():
             erofs_tool = candidate
             break
     
     if not erofs_tool:
-        log.warning("[PARTITION] extract.erofs không tìm thấy")
-        # Create placeholder
-        ensure_dir(output_dir)
-        placeholder = output_dir / "_EROFS_NOT_EXTRACTED.txt"
-        placeholder.write_text("erofs extraction needs extract.erofs tool\n", encoding='utf-8')
-        return TaskResult.success("erofs placeholder created")
+        return TaskResult.error(
+            "Thiếu tool extract.erofs.exe để extract erofs. "
+            "Vui lòng thêm extract.erofs.exe vào tools/win64."
+        )
     
     ensure_dir(output_dir)
     
-    # extract.erofs <img> <output_dir>
-    args = [erofs_tool, img_path, output_dir]
-    log.info(f"[PARTITION] Extracting erofs: {img_path.name}")
+    # extract.erofs -x -i <image> -o <output_dir>
+    # Syntax varies by version, try common patterns
+    args = [erofs_tool, "-x", "-i", img_path, "-o", output_dir]
     
+    log.info(f"[PARTITION] Extracting erofs...")
     code, stdout, stderr = run_tool(args, timeout=1800)
     
-    if code != 0:
-        log.error(f"[PARTITION] extract.erofs failed: {stderr}")
-        return TaskResult.error(f"extract.erofs failed: {stderr[:200]}")
+    # Check output
+    files = list(output_dir.rglob("*"))
+    if not files:
+        # Try alternative syntax
+        args2 = [erofs_tool, img_path, output_dir]
+        code, stdout, stderr = run_tool(args2, timeout=1800)
+        files = list(output_dir.rglob("*"))
     
-    log.success(f"[PARTITION] Extracted erofs to: {output_dir}")
-    return TaskResult.success("erofs extracted")
+    if not files:
+        err_msg = stderr[:300] if stderr else "Không có output"
+        return TaskResult.error(f"extract.erofs không tạo file. Error: {err_msg}")
+    
+    file_count = len([f for f in files if f.is_file()])
+    log.success(f"[PARTITION] erofs extracted: {file_count} files")
+    
+    return TaskResult.success(f"Extracted {file_count} files from erofs")
+
+
+def validate_extract_output(output_dir: Path, partition_name: str) -> Tuple[bool, str]:
+    """Validate extraction output thật sự có file"""
+    if not output_dir.exists():
+        return False, f"Folder không tồn tại: {output_dir}"
+    
+    files = list(output_dir.rglob("*"))
+    file_count = len([f for f in files if f.is_file()])
+    
+    if file_count == 0:
+        return False, f"Folder rỗng: {output_dir}"
+    
+    return True, f"{file_count} files"
 
 
 def extract_partition_image(
@@ -185,9 +232,14 @@ def extract_partition_image(
 ) -> TaskResult:
     """
     Extract partition image (system/vendor/product/...)
-    1. Convert sparse to raw if needed
-    2. Detect fs type
-    3. Extract to folder
+    OUTPUT CONTRACT:
+    - Filesystem → project.out_source_dir/<partition_name>/
+    
+    Flow:
+    1. Convert sparse to raw if needed (intermediate)
+    2. Detect fs type (ext4/erofs)
+    3. Extract to out/Source/<partition>/
+    4. Validate output thật tồn tại
     """
     log = get_log_bus()
     start = time.time()
@@ -200,81 +252,85 @@ def extract_partition_image(
         else:
             candidates = list(project.in_dir.glob("*.img"))
             if not candidates:
-                return TaskResult.error("Không tìm thấy partition image")
+                return TaskResult.error("Không tìm thấy partition image trong input folder")
             img_path = candidates[0]
     
     img_path = Path(img_path)
     if not img_path.exists():
         return TaskResult.error(f"Image không tồn tại: {img_path}")
     
-    log.info(f"[PARTITION] Processing: {img_path.name}")
     partition_name = img_path.stem
+    log.info(f"[PARTITION] Processing: {partition_name} ({human_size(img_path.stat().st_size)})")
     
     # Setup directories
-    extract_dir = project.root_dir / "extract"
-    partitions_dir = extract_dir / "partitions"
-    fs_dir = extract_dir / "fs" / partition_name
-    temp_dir = project.root_dir / "temp"
-    
-    ensure_dir(partitions_dir)
+    temp_dir = project.temp_dir
     ensure_dir(temp_dir)
     
-    # Check if sparse
-    header = read_file_header(img_path, 16)
-    was_sparse = is_sparse_header(header)
+    # OUTPUT CONTRACT: filesystem goes to out/Source/<partition>/
+    output_dir = project.out_source_dir / partition_name
+    ensure_dir(output_dir)
     
     work_img = img_path
+    was_sparse = False
     
-    if was_sparse:
-        log.info("[PARTITION] Detected sparse image, converting to raw...")
+    # Step 1: Convert sparse to raw if needed
+    if is_sparse_image(img_path):
+        log.info("[PARTITION] Detected sparse image")
+        was_sparse = True
         raw_img = temp_dir / f"{partition_name}_raw.img"
-        result = convert_sparse_to_raw(img_path, raw_img, _cancel_token)
+        
+        result = convert_sparse_to_raw(img_path, raw_img)
         if not result.ok:
             return result
         work_img = raw_img
     
-    # Detect filesystem type
+    # Step 2: Detect filesystem type
     fs_type = detect_fs_type(work_img)
-    log.info(f"[PARTITION] Filesystem: {fs_type}")
+    log.info(f"[PARTITION] Filesystem type: {fs_type}")
     
-    # Extract based on fs type
+    # Step 3: Extract based on fs type
     if fs_type == "ext4":
-        result = extract_ext4(work_img, fs_dir, _cancel_token)
+        result = extract_ext4_real(work_img, output_dir)
     elif fs_type == "erofs":
-        result = extract_erofs(work_img, fs_dir, _cancel_token)
+        result = extract_erofs_real(work_img, output_dir)
     else:
-        log.warning(f"[PARTITION] Unknown filesystem, skipping extraction")
-        ensure_dir(fs_dir)
-        placeholder = fs_dir / "_UNKNOWN_FS.txt"
-        placeholder.write_text(f"Unknown filesystem type: {fs_type}\n", encoding='utf-8')
-        result = TaskResult.success("Unknown fs placeholder created")
+        return TaskResult.error(
+            f"Không xác định được filesystem type của {partition_name}. "
+            "Chỉ hỗ trợ ext4 và erofs."
+        )
+    
+    if not result.ok:
+        return result
+    
+    # Step 4: Validate output THẬT
+    valid, msg = validate_extract_output(output_dir, partition_name)
+    if not valid:
+        return TaskResult.error(f"Extract failed validation: {msg}")
     
     # Save metadata
-    metadata = PartitionMetadata(
-        name=partition_name,
-        original_path=str(img_path),
-        fs_type=fs_type,
-        was_sparse=was_sparse,
-        raw_path=str(work_img),
-        size=work_img.stat().st_size
-    )
+    meta_dir = project.extract_dir
+    ensure_dir(meta_dir)
+    meta_file = meta_dir / "partition_metadata.json"
     
-    meta_file = extract_dir / "partition_metadata.json"
-    meta_dict = {
-        "name": metadata.name,
-        "original_path": metadata.original_path,
-        "fs_type": metadata.fs_type,
-        "was_sparse": metadata.was_sparse,
-        "raw_path": metadata.raw_path,
-        "size": metadata.size
+    metadata = {
+        "partition_name": partition_name,
+        "original_path": str(img_path),
+        "was_sparse": was_sparse,
+        "fs_type": fs_type,
+        "raw_image_path": str(work_img),
+        "out_source_path": str(output_dir),
+        "file_count": len(list(output_dir.rglob("*")))
     }
-    meta_file.write_text(json.dumps(meta_dict, indent=2), encoding='utf-8')
+    meta_file.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     
     elapsed = int((time.time() - start) * 1000)
-    log.success(f"[PARTITION] Processed in {elapsed}ms")
+    
+    log.success(f"[PARTITION] Hoàn tất Extract. Output: {output_dir}")
+    log.info(f"[PARTITION] → out/Source/{partition_name}/ ({msg})")
     
     return TaskResult.success(
-        message=f"Extracted {partition_name} ({fs_type})",
+        message=f"Extracted {partition_name} ({fs_type}) → out/Source/{partition_name}/",
+        artifacts=[str(output_dir)],
         elapsed_ms=elapsed
     )
 
@@ -287,12 +343,14 @@ def repack_partition_image(
 ) -> TaskResult:
     """
     Repack partition image from extracted folder
+    OUTPUT CONTRACT:
+    - Image → project.out_image_dir/<partition_name>_patched.img
     """
     log = get_log_bus()
     start = time.time()
     
     # Load metadata
-    meta_file = project.root_dir / "extract" / "partition_metadata.json"
+    meta_file = project.extract_dir / "partition_metadata.json"
     if not meta_file.exists():
         return TaskResult.error("Không tìm thấy metadata. Hãy extract trước.")
     
@@ -301,69 +359,77 @@ def repack_partition_image(
     except Exception as e:
         return TaskResult.error(f"Lỗi đọc metadata: {e}")
     
-    partition_name = partition_name or meta.get("name", "partition")
+    partition_name = partition_name or meta.get("partition_name", "partition")
     fs_type = meta.get("fs_type", "unknown")
     
     log.info(f"[PARTITION] Repacking: {partition_name} ({fs_type})")
     
-    fs_dir = project.root_dir / "extract" / "fs" / partition_name
-    if not fs_dir.exists():
-        return TaskResult.error(f"Folder không tồn tại: {fs_dir}")
+    # Input: out/Source/<partition>/
+    source_dir = project.out_source_dir / partition_name
+    if not source_dir.exists():
+        return TaskResult.error(f"Source không tồn tại: {source_dir}")
     
-    out_dir = project.root_dir / "out"
-    ensure_dir(out_dir)
-    output_path = out_dir / f"{partition_name}_patched.img"
+    # OUTPUT CONTRACT: out/Image/<partition>_patched.img
+    out_img_dir = project.out_image_dir
+    ensure_dir(out_img_dir)
+    output_path = out_img_dir / f"{partition_name}_patched.img"
     
     registry = get_tool_registry()
     
     if fs_type == "ext4":
-        # Use make_ext4fs
         make_ext4fs = registry.get_tool_path("make_ext4fs")
         if not make_ext4fs:
-            return TaskResult.error("Tool make_ext4fs không tìm thấy")
+            return TaskResult.error("Thiếu tool make_ext4fs.exe. Vui lòng kiểm tra Tools Doctor.")
         
-        # Basic make_ext4fs command
-        args = [make_ext4fs, "-l", str(meta.get("size", 1024*1024*1024)), "-a", f"/{partition_name}", output_path, fs_dir]
+        # Estimate size
+        total_size = sum(f.stat().st_size for f in source_dir.rglob("*") if f.is_file())
+        img_size = max(total_size * 2, 256 * 1024 * 1024)  # At least 256MB, 2x content
+        
+        args = [make_ext4fs, "-l", str(img_size), "-a", f"/{partition_name}", output_path, source_dir]
         log.info("[PARTITION] Running make_ext4fs...")
         code, stdout, stderr = run_tool(args, timeout=1800)
         
         if code != 0:
-            log.error(f"[PARTITION] make_ext4fs failed: {stderr}")
             return TaskResult.error(f"make_ext4fs failed: {stderr[:200]}")
             
     elif fs_type == "erofs":
         mkfs_erofs = registry.get_tool_path("mkfs_erofs")
         if not mkfs_erofs:
-            return TaskResult.error("Tool mkfs.erofs không tìm thấy")
+            return TaskResult.error("Thiếu tool mkfs.erofs.exe. Vui lòng kiểm tra Tools Doctor.")
         
-        args = [mkfs_erofs, output_path, fs_dir]
+        args = [mkfs_erofs, output_path, source_dir]
         log.info("[PARTITION] Running mkfs.erofs...")
         code, stdout, stderr = run_tool(args, timeout=1800)
         
         if code != 0:
-            log.error(f"[PARTITION] mkfs.erofs failed: {stderr}")
             return TaskResult.error(f"mkfs.erofs failed: {stderr[:200]}")
     else:
         return TaskResult.error(f"Không hỗ trợ repack fs_type: {fs_type}")
     
+    # Validate output
+    if not output_path.exists():
+        return TaskResult.error("Repack không tạo output image")
+    
     # Convert to sparse if requested
-    if output_sparse and output_path.exists():
+    final_path = output_path
+    if output_sparse:
         img2simg = registry.get_tool_path("img2simg")
         if img2simg:
-            sparse_path = out_dir / f"{partition_name}_patched_sparse.img"
+            sparse_path = out_img_dir / f"{partition_name}_patched_sparse.img"
             args = [img2simg, output_path, sparse_path]
             code, _, _ = run_tool(args)
             if code == 0 and sparse_path.exists():
-                output_path.unlink()
-                output_path = sparse_path
+                output_path.unlink()  # Remove raw
+                final_path = sparse_path
     
     elapsed = int((time.time() - start) * 1000)
-    size = output_path.stat().st_size if output_path.exists() else 0
+    size = final_path.stat().st_size
     
-    log.success(f"[PARTITION] Repacked: {output_path.name} ({human_size(size)})")
+    log.success(f"[PARTITION] Hoàn tất Repack. Output: {final_path}")
+    log.info(f"[PARTITION] → out/Image/{final_path.name} ({human_size(size)})")
     
     return TaskResult.success(
-        message=f"Repacked {partition_name} ({human_size(size)})",
-        artifacts=[str(output_path)],
+        message=f"Repacked {partition_name} → out/Image/{final_path.name}",
+        artifacts=[str(final_path)],
         elapsed_ms=elapsed
     )

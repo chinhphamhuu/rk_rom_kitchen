@@ -102,13 +102,34 @@ class Project:
     def out_dir(self) -> Path:
         return self._path / 'out'
     
+    # === OUTPUT CONTRACT ===
+    # out/Source: filesystem extracted (cây thư mục)
+    # out/Image: image files output (.img)
+    
     @property
-    def source_dir(self) -> Path:
+    def out_source_dir(self) -> Path:
+        """Output: filesystem extracted (out/Source)"""
         return self._path / 'out' / 'Source'
     
     @property
-    def image_dir(self) -> Path:
+    def out_image_dir(self) -> Path:
+        """Output: image files (out/Image)"""
         return self._path / 'out' / 'Image'
+    
+    # Legacy aliases for compatibility
+    @property
+    def source_dir(self) -> Path:
+        return self.out_source_dir
+    
+    @property
+    def image_dir(self) -> Path:
+        return self.out_image_dir
+    
+    # Intermediate dirs (not user-facing output)
+    @property
+    def extract_dir(self) -> Path:
+        """Intermediate: extraction working area"""
+        return self._path / 'extract'
     
     @property
     def temp_dir(self) -> Path:

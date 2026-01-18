@@ -114,6 +114,20 @@ TOOL_DEFINITIONS = {
         "description": "Android Debug Bridge",
         "version_arg": "version",
     },
+    
+    # Filesystem extraction tools
+    "debugfs": {
+        "aliases": ["debugfs.exe", "debugfs"],
+        "description": "ext4 filesystem debugger (rdump)",
+        "version_arg": None,
+        "required_for": "ext4 extraction",
+    },
+    "extract_erofs": {
+        "aliases": ["extract.erofs.exe", "extract_erofs.exe", "fsck.erofs.exe"],
+        "description": "EROFS filesystem extractor",
+        "version_arg": None,
+        "required_for": "erofs extraction",
+    },
 }
 
 

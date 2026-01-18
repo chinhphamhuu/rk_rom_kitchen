@@ -1,6 +1,10 @@
 """
 Super Image Engine - REAL implementation cho super.img (dynamic partitions)
-MUST: preserve metadata/layout, lpdump để lấy metadata, resize mode hybrid
+OUTPUT CONTRACT:
+- Partitions extracted → project.out_image_dir/super/partitions/*.img
+- Metadata → project.out_image_dir/super/super_metadata.json
+- Super output → project.out_image_dir/super/super_patched.img
+MUST: preserve metadata/layout, lpdump bắt buộc, resize mode hybrid
 """
 import os
 import sys
@@ -207,15 +211,20 @@ def unpack_super_img(
     
     simg2img = registry.get_tool_path("simg2img")
     
-    # Dump metadata first
+    # Dump metadata first (REQUIRED)
     meta, err = dump_super_metadata(super_path, _cancel_token)
-    if meta:
-        # Save metadata
-        meta_dir = project.root_dir / "extract"
-        ensure_dir(meta_dir)
-        meta_file = meta_dir / "super_metadata.json"
-        meta_file.write_text(json.dumps(meta.to_dict(), indent=2), encoding='utf-8')
-        log.info(f"[SUPER] Saved metadata: {meta_file}")
+    if not meta:
+        return TaskResult.error(f"Lấy metadata thất bại: {err}")
+    
+    # OUTPUT CONTRACT: out/Image/super/
+    super_out_dir = project.out_image_dir / "super"
+    partitions_out_dir = super_out_dir / "partitions"
+    ensure_dir(partitions_out_dir)
+    
+    # Save metadata
+    meta_file = super_out_dir / "super_metadata.json"
+    meta_file.write_text(json.dumps(meta.to_dict(), indent=2), encoding='utf-8')
+    log.info(f"[SUPER] Saved metadata: {meta_file}")
     
     # Check if sparse
     is_sparse = False
@@ -241,11 +250,8 @@ def unpack_super_img(
         else:
             log.warning(f"[SUPER] simg2img failed, trying direct lpunpack: {stderr}")
     
-    # Unpack with lpunpack
-    output_dir = project.root_dir / "extract" / "partitions"
-    ensure_dir(output_dir)
-    
-    args = [lpunpack, work_super, output_dir]
+    # Unpack with lpunpack → out/Image/super/partitions/
+    args = [lpunpack, work_super, partitions_out_dir]
     log.info("[SUPER] Running lpunpack...")
     code, stdout, stderr = run_tool(args, timeout=1800)
     
@@ -253,16 +259,18 @@ def unpack_super_img(
         log.error(f"[SUPER] lpunpack failed: {stderr}")
         return TaskResult.error(f"lpunpack failed: {stderr[:200]}")
     
-    # Count extracted
-    extracted = list(output_dir.glob("*.img"))
+    # Validate output THẬT
+    extracted = list(partitions_out_dir.glob("*.img"))
     if not extracted:
         return TaskResult.error("lpunpack không tạo partition images")
     
     elapsed = int((time.time() - start) * 1000)
-    log.success(f"[SUPER] Unpacked {len(extracted)} partitions")
+    
+    log.success(f"[SUPER] Hoàn tất Unpack. Output: {partitions_out_dir}")
+    log.info(f"[SUPER] → out/Image/super/partitions/ ({len(extracted)} partitions)")
     
     return TaskResult.success(
-        message=f"Unpacked {len(extracted)} partitions từ super.img",
+        message=f"Unpacked {len(extracted)} partitions → out/Image/super/partitions/",
         artifacts=[str(f) for f in extracted],
         elapsed_ms=elapsed
     )
@@ -339,8 +347,15 @@ def build_super_img(
     simg2img = registry.get_tool_path("simg2img")
     img2simg = registry.get_tool_path("img2simg")
     
-    # Load saved metadata
-    meta_file = project.root_dir / "extract" / "super_metadata.json"
+    # OUTPUT CONTRACT: out/Image/super/
+    super_out_dir = project.out_image_dir / "super"
+    
+    # Load saved metadata from out/Image/super/
+    meta_file = super_out_dir / "super_metadata.json"
+    if not meta_file.exists():
+        # Fallback: try extract dir (legacy)
+        meta_file = project.extract_dir / "super_metadata.json"
+    
     if not meta_file.exists():
         return TaskResult.error("Không tìm thấy super_metadata.json. Hãy unpack super.img trước.")
     
@@ -362,8 +377,13 @@ def build_super_img(
     except Exception as e:
         return TaskResult.error(f"Lỗi đọc metadata: {e}")
     
-    partitions_dir = project.root_dir / "extract" / "partitions"
-    temp_dir = project.root_dir / "temp" / "super_build"
+    # Partitions from out/Image/super/partitions/
+    partitions_dir = super_out_dir / "partitions"
+    if not partitions_dir.exists():
+        # Fallback: try legacy path
+        partitions_dir = project.extract_dir / "partitions"
+    
+    temp_dir = project.temp_dir / "super_build"
     ensure_dir(temp_dir)
     
     # Prepare partitions (convert to raw if sparse)
@@ -405,8 +425,8 @@ def build_super_img(
     if not ok:
         return TaskResult.error(err)
     
-    # Build lpmake command
-    output_path = project.root_dir / "out" / "super_patched.img"
+    # Build lpmake command - OUTPUT: out/Image/super/super_patched.img
+    output_path = super_out_dir / "super_patched.img"
     ensure_dir(output_path.parent)
     
     args = [
