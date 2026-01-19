@@ -19,7 +19,7 @@ class PageBuild(QWidget):
     """
     Build page:
     - Build output ROM
-    - Partition repack dropdown + Repack All
+    - Partition repack dropdown + Repack All (only for partition_image mode)
     - Show build status and output artifacts
     """
     
@@ -29,6 +29,9 @@ class PageBuild(QWidget):
         self._log = get_log_bus()
         self._state = get_state_machine()
         self._tasks = get_task_manager()
+        
+        # Track artifacts separately to avoid refresh() overwrite
+        self._last_artifacts = []
         
         self._setup_ui()
     
@@ -60,9 +63,15 @@ class PageBuild(QWidget):
         
         layout.addWidget(status_group)
         
-        # Partition Repack section
-        partition_group = QGroupBox("Partition Repack")
-        partition_layout = QVBoxLayout(partition_group)
+        # Partition Repack section (ONLY for partition_image mode)
+        self._partition_group = QGroupBox("Partition Repack")
+        partition_layout = QVBoxLayout(self._partition_group)
+        
+        # Mode hint label
+        self._lbl_partition_mode_hint = QLabel("")
+        self._lbl_partition_mode_hint.setStyleSheet("color: #969696; font-style: italic;")
+        self._lbl_partition_mode_hint.setWordWrap(True)
+        partition_layout.addWidget(self._lbl_partition_mode_hint)
         
         # Dropdown + buttons row
         dropdown_row = QHBoxLayout()
@@ -90,7 +99,7 @@ class PageBuild(QWidget):
         format_row.addStretch()
         partition_layout.addLayout(format_row)
         
-        layout.addWidget(partition_group)
+        layout.addWidget(self._partition_group)
         
         # Build actions
         build_group = QGroupBox("Build ROM")
@@ -110,13 +119,18 @@ class PageBuild(QWidget):
         
         layout.addWidget(build_group)
         
-        # Output
+        # Output section - split into summary and artifacts
         output_group = QGroupBox("Output")
         output_layout = QVBoxLayout(output_group)
         
-        self._lbl_output = QLabel("—")
-        self._lbl_output.setWordWrap(True)
-        output_layout.addWidget(self._lbl_output)
+        # Summary line (can be updated by refresh)
+        self._lbl_output_summary = QLabel("—")
+        output_layout.addWidget(self._lbl_output_summary)
+        
+        # Artifacts list (NEVER overwritten by refresh)
+        self._lbl_output_artifacts = QLabel("")
+        self._lbl_output_artifacts.setWordWrap(True)
+        output_layout.addWidget(self._lbl_output_artifacts)
         
         # Open output button
         btn_row = QHBoxLayout()
@@ -152,6 +166,27 @@ class PageBuild(QWidget):
         except Exception:
             return []
     
+    def _update_partition_repack_state(self):
+        """Enable/disable Partition Repack group based on input_type"""
+        project = self._projects.current
+        
+        if not project:
+            self._partition_group.setEnabled(False)
+            self._lbl_partition_mode_hint.setText("Vui lòng chọn project")
+            return
+        
+        input_type = getattr(project.config, 'input_type', '')
+        
+        if input_type == "partition_image":
+            self._partition_group.setEnabled(True)
+            self._lbl_partition_mode_hint.setText("")
+        else:
+            self._partition_group.setEnabled(False)
+            self._lbl_partition_mode_hint.setText(
+                "Chức năng này chỉ dùng cho chế độ partition image (system.img/vendor.img/...). "
+                "Với update.img/super.img, hãy dùng Extract/Build theo pipeline."
+            )
+    
     def _on_repack_one(self):
         """Repack selected partition"""
         if not self._state.can_start_task():
@@ -172,6 +207,7 @@ class PageBuild(QWidget):
         project.update_config(output_sparse=self._chk_sparse.isChecked())
         
         self._log.info(f"Repack Partition: {partition_name}...")
+        self._clear_artifacts()
         
         self._tasks.submit(
             pipeline_build,
@@ -201,6 +237,7 @@ class PageBuild(QWidget):
         project.update_config(output_sparse=self._chk_sparse.isChecked())
         
         self._log.info(f"Repack All: {len(partitions)} partitions...")
+        self._clear_artifacts()
         
         self._tasks.submit(
             pipeline_build,
@@ -225,6 +262,7 @@ class PageBuild(QWidget):
             return
         
         self._log.info("Bắt đầu Build ROM...")
+        self._clear_artifacts()
         
         self._tasks.submit(
             pipeline_build,
@@ -233,27 +271,47 @@ class PageBuild(QWidget):
             project=project
         )
     
+    def _clear_artifacts(self):
+        """Clear artifacts display before build"""
+        self._last_artifacts = []
+        self._lbl_output_artifacts.setText("")
+        self._lbl_output_summary.setText("Đang build...")
+        self._lbl_output_summary.setStyleSheet("color: #969696;")
+    
     def _on_build_finished(self, result):
-        """Handle build completion - show artifacts from result"""
+        """Handle build completion - show artifacts from result, NOT overwritten by refresh"""
         if result.ok:
             self._log.success(f"Build thành công trong {result.elapsed_ms}ms")
             
-            # Display artifacts from result (NOT legacy path check)
             if result.artifacts:
+                # Store artifacts to prevent refresh overwrite
+                self._last_artifacts = result.artifacts[:]
+                
+                # Display artifacts list
                 artifacts_text = "\n".join([f"✓ {a}" for a in result.artifacts[:5]])
                 if len(result.artifacts) > 5:
                     artifacts_text += f"\n... và {len(result.artifacts) - 5} files khác"
-                self._lbl_output.setText(artifacts_text)
-                self._lbl_output.setStyleSheet("color: #4ec9b0;")
+                self._lbl_output_artifacts.setText(artifacts_text)
+                self._lbl_output_artifacts.setStyleSheet("color: #4ec9b0;")
+                
+                # Summary
+                self._lbl_output_summary.setText(f"✓ Hoàn tất: {len(result.artifacts)} files")
+                self._lbl_output_summary.setStyleSheet("color: #4ec9b0;")
             else:
-                self._lbl_output.setText("✓ Build OK (check out/Image)")
-                self._lbl_output.setStyleSheet("color: #4ec9b0;")
+                # WARNING: OK but no artifacts
+                self._lbl_output_artifacts.setText("")
+                self._lbl_output_summary.setText(
+                    "⚠️ Hoàn tất nhưng không nhận được artifacts. "
+                    "Vui lòng mở logs/ để kiểm tra."
+                )
+                self._lbl_output_summary.setStyleSheet("color: #ffa500;")  # Orange warning
             
             self.refresh()
         else:
             self._log.error(f"Build thất bại: {result.message}")
-            self._lbl_output.setText(f"✗ {result.message}")
-            self._lbl_output.setStyleSheet("color: #f14c4c;")
+            self._lbl_output_artifacts.setText("")
+            self._lbl_output_summary.setText(f"✗ {result.message}")
+            self._lbl_output_summary.setStyleSheet("color: #f14c4c;")
             QMessageBox.critical(self, t("dialog_error"), result.message)
     
     def _on_open_output(self):
@@ -279,11 +337,11 @@ class PageBuild(QWidget):
         """Update UI based on state"""
         is_busy = state == "running"
         self._btn_build.setEnabled(not is_busy)
-        self._btn_repack_one.setEnabled(not is_busy)
-        self._btn_repack_all.setEnabled(not is_busy)
+        self._btn_repack_one.setEnabled(not is_busy and self._partition_group.isEnabled())
+        self._btn_repack_all.setEnabled(not is_busy and self._partition_group.isEnabled())
     
     def refresh(self):
-        """Refresh page content"""
+        """Refresh page content - DOES NOT overwrite artifacts"""
         project = self._projects.current
         if project:
             config = project.config
@@ -303,27 +361,33 @@ class PageBuild(QWidget):
                 color = "#4ec9b0" if flag else "#969696"
                 lbl.setStyleSheet(f"color: {color};")
             
+            # Update partition repack state based on input_type
+            self._update_partition_repack_state()
+            
             # Populate partition dropdown
             self._combo_partition.clear()
             partitions = self._get_partition_list()
             if partitions:
                 self._combo_partition.addItems(partitions)
             
-            # Check output using out_image_dir (new contract)
-            output_imgs = list(project.out_image_dir.rglob("*.img"))
-            if output_imgs:
-                self._lbl_output.setText(f"✓ {len(output_imgs)} images trong out/Image/")
-                self._lbl_output.setStyleSheet("color: #4ec9b0;")
-            else:
-                self._lbl_output.setText("—")
-                self._lbl_output.setStyleSheet("")
+            # Update summary ONLY if no artifacts stored
+            if not self._last_artifacts:
+                output_imgs = list(project.out_image_dir.rglob("*.img"))
+                if output_imgs:
+                    self._lbl_output_summary.setText(f"{len(output_imgs)} images trong out/Image/")
+                    self._lbl_output_summary.setStyleSheet("color: #969696;")
+                else:
+                    self._lbl_output_summary.setText("—")
+                    self._lbl_output_summary.setStyleSheet("")
         else:
             self._lbl_imported.setText("Imported: —")
             self._lbl_extracted.setText("Extracted: —")
             self._lbl_patched.setText("Patched: —")
             self._lbl_built.setText("Built: —")
-            self._lbl_output.setText("—")
+            self._lbl_output_summary.setText("—")
+            self._lbl_output_artifacts.setText("")
             self._combo_partition.clear()
+            self._partition_group.setEnabled(False)
     
     def update_translations(self):
         """Update UI khi đổi ngôn ngữ"""
