@@ -99,14 +99,16 @@ def detect_fs_type(img_path: Path) -> str:
 def normalize_mount_point(partition_name: str) -> str:
     """
     Normalize mount point to reduce bootloop on Android 10/11/12
-    system_a -> /system
-    vendor_b -> /vendor
-    product_a -> /product
+    system_a -> system (not /system_a)
+    vendor_b -> vendor
+    product_a -> product
+    
+    Returns base name WITHOUT leading slash (for make_ext4fs -a)
     """
     base = partition_name.lower()
     if base.endswith("_a") or base.endswith("_b"):
         base = base[:-2]
-    return f"/{base}"
+    return base
 
 
 def convert_sparse_to_raw(sparse_path: Path, raw_path: Path) -> TaskResult:
@@ -545,6 +547,16 @@ def repack_all_partitions(
     succeeded = [name for name, r in results if r.ok]
     failed = [name for name, r in results if not r.ok]
     
+    # Collect artifacts from successful repacks
+    artifacts = []
+    for name, r in results:
+        if r.ok and r.artifacts:
+            artifacts.extend(r.artifacts)
+    
+    # Always include out/Image dir
+    if not artifacts:
+        artifacts = [str(project.out_image_dir)]
+    
     elapsed = int((time.time() - start) * 1000)
     
     if failed:
@@ -554,9 +566,10 @@ def repack_all_partitions(
             elapsed_ms=elapsed
         )
     
-    log.success(f"[PARTITION] Repack All: {len(succeeded)} partitions OK")
+    log.success(f"[PARTITION] Repack All: {len(succeeded)} partitions → out/Image/")
     
     return TaskResult.success(
         message=f"Repacked {len(succeeded)} partitions → out/Image/",
+        artifacts=artifacts,
         elapsed_ms=elapsed
     )

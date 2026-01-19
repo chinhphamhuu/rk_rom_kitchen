@@ -123,60 +123,81 @@ def preflight_check(project: Project) -> Tuple[bool, str]:
     return True, "OK"
 
 
+def get_base_name(name: str) -> str:
+    """Extract base name from partition (system_a -> system)"""
+    lower = name.lower()
+    if lower.endswith("_a"):
+        return lower[:-2]
+    elif lower.endswith("_b"):
+        return lower[:-2]
+    return lower
+
+
 def filter_partitions_by_slot(partitions: List[str], slot_mode: str) -> List[str]:
     """
     Filter partitions dựa trên slot_mode
-    DEDUP: nếu có *_a hoặc *_b thì bỏ base name tương ứng
+    
+    auto: ưu tiên *_a; nếu không có *_a thì lấy *_b; nếu không có cả hai thì lấy base
+    A: chỉ *_a (fallback base nếu không có *_a)
+    B: chỉ *_b (fallback base nếu không có *_b)
+    both: lấy cả *_a và *_b; nếu chỉ có base thì lấy base
     """
-    # First, build set of base names that have slot variants
-    lower_parts = [p.lower() for p in partitions]
+    # Build sets of base names that have slot variants
     has_slot_a = set()
     has_slot_b = set()
+    base_names = set()
     
-    for p in lower_parts:
-        if p.endswith("_a"):
-            has_slot_a.add(p[:-2])  # base name
-        elif p.endswith("_b"):
-            has_slot_b.add(p[:-2])
+    for p in partitions:
+        lower = p.lower()
+        if lower.endswith("_a"):
+            has_slot_a.add(lower[:-2])
+        elif lower.endswith("_b"):
+            has_slot_b.add(lower[:-2])
+        else:
+            base_names.add(lower)
     
     result = []
     
     for p in partitions:
         name = p.lower()
-        base = name.replace("_a", "").replace("_b", "")
+        base = get_base_name(name)
         
         if slot_mode == "both":
-            # Include *_a and *_b; skip base if slot variant exists
+            # Include *_a and *_b; skip base if any slot variant exists
             if name.endswith("_a") or name.endswith("_b"):
                 result.append(p)
             elif base not in has_slot_a and base not in has_slot_b:
-                # No slot variant, include base
                 result.append(p)
                 
         elif slot_mode == "A":
-            # Prefer *_a, skip base if *_a exists
+            # Only *_a; fallback to base if no *_a
             if name.endswith("_a"):
                 result.append(p)
             elif not name.endswith("_b"):
-                # Base or non-slot
+                # Include base only if no *_a variant exists
                 if base not in has_slot_a:
                     result.append(p)
                     
         elif slot_mode == "B":
-            # Prefer *_b, skip base if *_b exists
+            # Only *_b; fallback to base if no *_b
             if name.endswith("_b"):
                 result.append(p)
             elif not name.endswith("_a"):
-                # Base or non-slot
+                # Include base only if no *_b variant exists
                 if base not in has_slot_b:
                     result.append(p)
                     
-        else:  # auto - prefer _a, skip base/b if _a exists
+        else:  # auto
+            # Prefer *_a; if no *_a then *_b; if no slot then base
             if name.endswith("_a"):
                 result.append(p)
-            elif not name.endswith("_b"):
-                # Include base only if no *_a variant
+            elif name.endswith("_b"):
+                # Include *_b only if no *_a variant exists
                 if base not in has_slot_a:
+                    result.append(p)
+            else:
+                # Include base only if no slot variants exist
+                if base not in has_slot_a and base not in has_slot_b:
                     result.append(p)
     
     return result
