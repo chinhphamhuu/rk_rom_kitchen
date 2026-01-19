@@ -175,6 +175,16 @@
             "required": false,
             "platform": "win64",
             "note": "For extracting EXT4 filesystem (optional - ext4 extraction sẽ bị giới hạn nếu thiếu tool này)"
+        },
+        {
+            "id": "e2fsdroid",
+            "name": "e2fsdroid",
+            "aliases": [
+                "e2fsdroid.exe"
+            ],
+            "required": false,
+            "platform": "win64",
+            "note": "Khuyến nghị để preserve fs_config/SELinux contexts khi build ext4 (giảm bootloop A10/11/12)"
         }
     ],
     "download_note": "Download tools from Android SDK, AOSP build tools, or community sources. Place in tools/win64/"

@@ -40,24 +40,34 @@ run.bat
 python -m app.tools.registry
 ```
 
-### Đặt tools vào: `tools/win64/`
+### Đặt tools vào: `tools/win64/` (bundled trong repo)
 
-| Tool ID | Aliases | Required | Purpose |
-|---------|---------|----------|---------|
-| `img_unpack` | img_unpack.exe, imgRePackerRK.exe | ✓ | Rockchip unpack |
-| `afptool` | afptool.exe | ✓ | Rockchip firmware |
-| `lpunpack` | lpunpack.exe | ✓ | Super partition unpack |
-| `lpmake` | lpmake.exe | ✓ | Super partition build |
-| `simg2img` | simg2img.exe | ✓ | Sparse to raw |
-| `img2simg` | img2simg.exe | ✓ | Raw to sparse |
-| `avbtool` | avbtool.exe, avbtool.py | ✓ | AVB disable |
-| `make_ext4fs` | make_ext4fs.exe | ✓ | Build ext4 image |
-| `mkfs_erofs` | mkfs.erofs.exe | | Build erofs image |
-| `magiskboot` | magiskboot.exe | | Boot unpack/patch |
-| `unpackbootimg` | unpackbootimg.exe | | Boot unpack alt |
-| `mkbootimg` | mkbootimg.exe | | Boot repack alt |
-| `aapt2` | aapt2.exe | | APK metadata |
-| `adb` | adb.exe | | ADB Magisk mode |
+#### Required Tools:
+| Tool ID | Aliases | Purpose |
+|---------|---------|---------|
+| `img_unpack` | img_unpack.exe, imgRePackerRK.exe | Rockchip unpack |
+| `afptool` | afptool.exe | Rockchip firmware |
+| `rkImageMaker` | rkImageMaker.exe | Rockchip image maker |
+| `lpunpack` | lpunpack.exe | Super partition unpack |
+| `lpmake` | lpmake.exe | Super partition build |
+| `lpdump` | lpdump.exe | Super partition dump |
+| `simg2img` | simg2img.exe | Sparse to raw |
+| `img2simg` | img2simg.exe | Raw to sparse |
+| `avbtool` | avbtool.exe, avbtool.py | AVB disable |
+| `make_ext4fs` | make_ext4fs.exe | Build ext4 image |
+| `extract_erofs` | extract.erofs.exe | Extract erofs partition |
+| `mkfs_erofs` | mkfs.erofs.exe | Build erofs image |
+
+#### Optional Tools:
+| Tool ID | Aliases | Purpose |
+|---------|---------|---------|
+| `debugfs` | debugfs.exe | Extract ext4 filesystem (nếu thiếu: ext4 extraction bị giới hạn) |
+| `e2fsdroid` | e2fsdroid.exe | Preserve fs_config/SELinux contexts (giảm bootloop A10/11/12) |
+| `magiskboot` | magiskboot.exe | Boot unpack/patch |
+| `unpackbootimg` | unpackbootimg.exe | Boot unpack alt |
+| `mkbootimg` | mkbootimg.exe | Boot repack alt |
+| `aapt2` | aapt2.exe | APK metadata |
+| `adb` | adb.exe | ADB Magisk mode |
 
 ## Workspace Structure
 

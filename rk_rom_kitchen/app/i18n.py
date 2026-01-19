@@ -73,7 +73,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "btn_browse": {"vi": "Duyệt...", "en": "Browse..."},
     "btn_refresh": {"vi": "Làm mới", "en": "Refresh"},
     "btn_check_tools": {"vi": "Kiểm tra tools", "en": "Check tools"},
-    "btn_download_tools": {"vi": "Tải tools (Phase 2)", "en": "Download tools (Phase 2)"},
+    "btn_download_tools": {"vi": "Danh sách tools (tham khảo)", "en": "Tools list (reference)"},
     
     # ===== Log Panel =====
     "log_title": {"vi": "Log", "en": "Log"},
