@@ -205,7 +205,13 @@ def patch_all_vbmeta(
         # Nếu target nằm trong out/.../partitions -> overwrite
         # Nếu target nằm trong in/ -> copy to out/.../partitions and overwrite
         
-        is_in_out = str(project.out_image_dir) in str(target)
+        is_in_out = False
+        try:
+            target.resolve().relative_to(project.out_image_dir.resolve())
+            is_in_out = True
+        except ValueError:
+            is_in_out = False
+            
         if is_in_out:
             out_path = target
         else:
@@ -242,9 +248,11 @@ def patch_all_vbmeta(
         if temp_path.exists():
             temp_size = temp_path.stat().st_size
             if temp_size > orig_size:
-                log.error(f"[AVB] {target.name}: New size ({temp_size}) > Original ({orig_size}). Skipping.")
+                msg = f"[AVB] CRITICAL: {target.name} Patched size ({temp_size}) > Original ({orig_size}). Corrupt risk!"
+                log.error(msg)
                 temp_path.unlink()
-                continue
+                # Fail hard
+                return TaskResult.error(msg)
                 
             # Pad
             if temp_size < orig_size:

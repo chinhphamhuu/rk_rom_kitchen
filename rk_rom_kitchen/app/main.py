@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 
-from app.crash_guard import install_crash_guard
+from app.core.crash_guard import setup_global_exception_hooks
 from app.i18n import set_language
 from app.core.settings_store import get_settings_store
 from app.core.logbus import get_log_bus
@@ -21,7 +21,7 @@ from app.ui.main_window import MainWindow
 def main():
     """Main entry point"""
     # Install crash guard FIRST
-    install_crash_guard()
+    setup_global_exception_hooks(log_to_file=True)
     
     # Load settings
     settings = get_settings_store()

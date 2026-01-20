@@ -149,17 +149,25 @@ def resolve_relative_path(project_root: Path, path_str: str) -> Path:
     import ntpath
     from pathlib import PureWindowsPath
     
-    # Check regular local Path absolute
+    # 1. Check if path_str is Windows absolute (e.g. C:\foo or \\server\share)
+    # Using ntpath.isabs covers C:\ on all platforms.
+    # Also check UNC explicitly if ntpath doesn't cover it on Linux (it should, but safety first)
+    is_win_abs = ntpath.isabs(path_str) or path_str.startswith("\\\\")
+    
+    if is_win_abs:
+        return PureWindowsPath(path_str)
+        
+    # 2. Check regular local Path absolute (e.g. /usr/bin/foo on Linux)
     p = Path(path_str)
     if p.is_absolute():
         return p
         
-    # Check if it looks like a Windows absolute path (e.g. C:\foo) even if on Linux
-    if ntpath.isabs(path_str):
-        # It is absolute in Windows terms.
-        # If we are on Windows, Path(path_str) is absolute, tested above.
-        # If we are NOT on Windows, Path(path_str) is relative.
-        # Return as-is (but as Path).
-        return p
+    # 3. Handle relative path joining
+    # Check if project_root looks like Windows path
+    root_str = str(project_root)
+    is_root_win = ntpath.isabs(root_str) or root_str.startswith("\\\\") or (len(root_str) > 1 and root_str[1] == ':')
+    
+    if is_root_win:
+        return PureWindowsPath(project_root) / PureWindowsPath(path_str)
         
     return project_root / p
