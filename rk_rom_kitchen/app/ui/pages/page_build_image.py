@@ -15,6 +15,7 @@ from ...core.project_store import get_project_store
 from ...core.logbus import get_log_bus
 from ...core.state_machine import get_state_machine, TaskType
 from ...core.task_manager import get_task_manager
+from ...core.slot_utils import get_mount_point
 from ...core.build_image import (
     BuildImageConfig, DEFAULT_PARTITION_CONFIGS, build_image,
     find_file_contexts, find_fs_config, get_folder_size, estimate_image_size
@@ -234,7 +235,7 @@ class BuildImagePage(QWidget):
             config = deepcopy(DEFAULT_PARTITION_CONFIGS[partition])
         else:
             config = BuildImageConfig()
-            config.mount_point = f"/{partition.replace('_a', '')}"
+            config.mount_point = get_mount_point(partition)
             config.output_filename = f"{partition}.img"
         
         # Set source dir

@@ -17,6 +17,7 @@ from .task_defs import TaskResult
 from .project_store import Project
 from .logbus import get_log_bus
 from .utils import ensure_dir, timestamp, human_size
+from .slot_utils import get_mount_point
 
 
 class OutputType(Enum):
@@ -451,7 +452,7 @@ def build_image_bulk(
             config = deepcopy(DEFAULT_PARTITION_CONFIGS[partition])
         else:
             config = BuildImageConfig()
-            config.mount_point = f"/{partition.replace('_a', '')}"
+            config.mount_point = get_mount_point(partition)
             config.output_filename = f"{partition}.img"
         
         # Set common options

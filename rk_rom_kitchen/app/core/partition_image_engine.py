@@ -19,6 +19,7 @@ from .task_defs import TaskResult
 from .project_store import Project
 from .logbus import get_log_bus
 from .utils import ensure_dir, human_size
+from .dirty_tracker import mark_clean_after_extract, auto_detect_dirty
 from ..tools.registry import get_tool_registry
 
 
@@ -621,6 +622,9 @@ def extract_partition_image(
     
     elapsed = int((time.time() - start) * 1000)
     
+    # Mark partition as CLEAN after successful extract
+    mark_clean_after_extract(project, partition_name)
+    
     log.success(f"[PARTITION] Hoàn tất Extract. Output: {output_dir}")
     log.info(f"[PARTITION] → out/Source/{partition_name}/ ({msg})")
     
@@ -692,6 +696,9 @@ def repack_partition_image(
     source_dir = project.out_source_dir / partition_name
     if not source_dir.exists():
         return TaskResult.error(f"Source không tồn tại: {source_dir}")
+    
+    # Auto-detect dirty từ snapshot comparison
+    auto_detect_dirty(project, partition_name)
     
     # OUTPUT CONTRACT: out/Image/<partition>_patched.img
     out_img_dir = project.out_image_dir
