@@ -114,16 +114,17 @@ def get_dirty_summary(project) -> str:
 def compute_source_snapshot(source_dir: Path) -> Dict:
     """
     Compute fast snapshot of source directory
+    Dùng mtime_ns (int) thay vì mtime (float) để ổn định trên Windows
     
     Returns:
-        {file_count, total_size, newest_mtime}
+        {file_count, total_size, newest_mtime_ns}
     """
     if not source_dir.exists():
-        return {"file_count": 0, "total_size": 0, "newest_mtime": 0}
+        return {"file_count": 0, "total_size": 0, "newest_mtime_ns": 0}
     
     file_count = 0
     total_size = 0
-    newest_mtime = 0
+    newest_mtime_ns = 0
     
     try:
         for f in source_dir.rglob("*"):
@@ -131,14 +132,14 @@ def compute_source_snapshot(source_dir: Path) -> Dict:
                 file_count += 1
                 stat = f.stat()
                 total_size += stat.st_size
-                newest_mtime = max(newest_mtime, stat.st_mtime)
+                newest_mtime_ns = max(newest_mtime_ns, stat.st_mtime_ns)
     except Exception:
         pass
     
     return {
         "file_count": file_count,
         "total_size": total_size,
-        "newest_mtime": newest_mtime
+        "newest_mtime_ns": newest_mtime_ns
     }
 
 
@@ -163,12 +164,15 @@ def save_snapshots(project, snapshots: Dict[str, Dict]) -> None:
 
 def save_partition_snapshot(project, partition_name: str) -> None:
     """Save snapshot for a partition after extract"""
+    log = get_log_bus()
     source_dir = project.out_source_dir / partition_name
     snapshot = compute_source_snapshot(source_dir)
     
     snapshots = load_snapshots(project)
     snapshots[partition_name] = snapshot
     save_snapshots(project, snapshots)
+    
+    log.debug(f"[SNAPSHOT] Đã lưu snapshot: {partition_name}")
 
 
 def check_partition_changed(project, partition_name: str) -> bool:
@@ -188,11 +192,14 @@ def check_partition_changed(project, partition_name: str) -> bool:
     source_dir = project.out_source_dir / partition_name
     current = compute_source_snapshot(source_dir)
     
-    # Compare
+    # Compare - support both old mtime and new mtime_ns keys
+    saved_mtime = saved.get("newest_mtime_ns", saved.get("newest_mtime", 0))
+    current_mtime = current.get("newest_mtime_ns", 0)
+    
     changed = (
         current["file_count"] != saved.get("file_count", 0) or
         current["total_size"] != saved.get("total_size", 0) or
-        current["newest_mtime"] != saved.get("newest_mtime", 0)
+        current_mtime != saved_mtime
     )
     
     return changed
@@ -211,11 +218,33 @@ def auto_detect_dirty(project, partition_name: str) -> bool:
     
     if check_partition_changed(project, partition_name):
         set_dirty(project, partition_name, True)
-        log.debug(f"[DIRTY] Auto-detect: {partition_name} CHANGED -> DIRTY")
+        log.info(f"[DIRTY] Phát hiện thay đổi: {partition_name} -> DIRTY (rebuild)")
         return True
     else:
         # Keep existing flag (don't override if already dirty)
         current = is_dirty(project, partition_name)
-        if current:
-            log.debug(f"[DIRTY] {partition_name} unchanged but was marked DIRTY")
+        if not current:
+            log.debug(f"[DIRTY] Không thay đổi: {partition_name} -> CLEAN (eligible copy-through)")
         return current
+
+
+def mark_clean_after_extract(project, partition_base: str) -> None:
+    """
+    Helper gọi sau khi extract xong một partition:
+    1) Save snapshot
+    2) Set dirty = False (CLEAN)
+    
+    Args:
+        project: Project instance
+        partition_base: Tên base của partition (không có slot suffix)
+    """
+    log = get_log_bus()
+    
+    # Save snapshot
+    save_partition_snapshot(project, partition_base)
+    
+    # Mark clean
+    set_dirty(project, partition_base, False)
+    
+    log.info(f"[DIRTY] Sau extract: {partition_base} -> CLEAN")
+
