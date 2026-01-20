@@ -23,6 +23,7 @@ def get_settings_path() -> Path:
 class Settings:
     """Settings data class"""
     language: str = "vi"  # vi hoặc en
+    workspace_root: str = ""  # Global workspace root path
     tool_dir: str = ""  # Custom tool directory
     recent_projects: list = field(default_factory=list)  # List of recent project names
     max_recent: int = 10
@@ -36,7 +37,7 @@ class Settings:
     @classmethod
     def from_dict(cls, data: dict) -> 'Settings':
         # Chỉ lấy các keys hợp lệ
-        valid_keys = {'language', 'tool_dir', 'recent_projects', 'max_recent', 
+        valid_keys = {'language', 'workspace_root', 'tool_dir', 'recent_projects', 'max_recent', 
                       'theme', 'log_level', 'auto_scroll_log'}
         filtered = {k: v for k, v in data.items() if k in valid_keys}
         return cls(**filtered)

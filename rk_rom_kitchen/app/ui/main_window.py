@@ -240,8 +240,13 @@ class MainWindow(QMainWindow):
                 migrate_workspace(old_root, new_root, mode)
                 set_workspace_root(new_root)
                 
-                QMessageBox.information(self, "Thành công", "Đã chuyển Workspace. Ứng dụng sẽ đóng để khởi động lại.")
-                self.close()
+                QMessageBox.information(self, "Thành công", "Đã chuyển Workspace. Ứng dụng sẽ khởi động lại.")
+                
+                # Restart Application
+                from app.core.utils import restart_application
+                self._log.info("Restarting application...")
+                restart_application()
+                
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi", f"Lỗi khi chuyển workspace: {e}")
                 

@@ -57,7 +57,7 @@ class PageSettings(QWidget):
         
         layout.addWidget(lang_group)
         
-        layout.addWidget(lang_group)
+
         
         # Tools status section
         tools_group = QGroupBox(t("settings_tools_table"))

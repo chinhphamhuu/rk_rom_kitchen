@@ -22,12 +22,22 @@ def get_workspace_root() -> Path:
     """
     s = _get_settings()
     path_str = s.get("workspace_root")
-    if not path_str:
+    # Strict check: must be string and not empty after strip
+    if not isinstance(path_str, str) or not path_str.strip():
         raise WorkspaceNotConfiguredError("Workspace chưa được cấu hình")
     return Path(path_str)
 
 def set_workspace_root(path: Path):
     """Lưu workspace root và khởi tạo layout"""
+    if not path.is_absolute():
+        path = path.resolve()
+        
+    # Validation: Try to create if not exists
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise OSError(f"Không thể tạo/truy cập workspace tại {path}: {e}")
+
     s = _get_settings()
     s.set("workspace_root", str(path))
     s.save()

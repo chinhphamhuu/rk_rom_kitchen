@@ -171,3 +171,18 @@ def resolve_relative_path(project_root: Path, path_str: str) -> Path:
         return PureWindowsPath(project_root) / PureWindowsPath(path_str)
         
     return project_root / p
+
+
+def restart_application():
+    """
+    Restart ứng dụng bằng QProcess.startDetached.
+    Yêu cầu: Đã khởi tạo QApplication.
+    Hàm này không return (thực ra nó gọi quit() rồi process sẽ chết).
+    """
+    import sys
+    # Dùng lazy import để tránh circular import hoặc load Qt quá sớm
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtCore import QProcess
+    
+    QProcess.startDetached(sys.executable, sys.argv)
+    QApplication.quit()

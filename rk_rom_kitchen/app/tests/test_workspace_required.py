@@ -47,13 +47,16 @@ class TestWorkspaceRequired(unittest.TestCase):
         # Mock save
         workspace.set_workspace_root(self.tmp_root)
         
-        self.mock_settings.set.assert_called_with("workspace_root", str(self.tmp_root))
+        # Implementation resolves relative path to absolute
+        abs_path = self.tmp_root.resolve()
+        
+        self.mock_settings.set.assert_called_with("workspace_root", str(abs_path))
         
         # Simulate getting it back
-        self.mock_settings.get.return_value = str(self.tmp_root)
+        self.mock_settings.get.return_value = str(abs_path)
         
         ws = workspace.Workspace()
-        self.assertEqual(ws.root, self.tmp_root)
+        self.assertEqual(ws.root.resolve(), abs_path)
         self.assertTrue(ws.projects_dir.exists())
         self.assertTrue(ws.tools_dir.exists())
         self.assertTrue((ws.tools_dir).name == "win64")

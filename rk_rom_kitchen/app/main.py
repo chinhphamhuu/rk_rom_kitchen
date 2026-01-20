@@ -22,6 +22,12 @@ from app.ui.main_window import MainWindow
 
 def main():
     """Main entry point"""
+    # Enable high DPI (MUST be before QApplication)
+    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
     # Create Qt application first (needed for Dialogs)
     app = QApplication(sys.argv)
     app.setApplicationName("RK ROM Kitchen")
@@ -63,12 +69,6 @@ def main():
     # Set language from settings
     lang = settings.get('language', 'vi')
     set_language(lang)
-    
-    # Enable high DPI
-    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
     # Setup log bus
     log = get_log_bus()
